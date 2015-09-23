@@ -1,0 +1,123 @@
+---
+title: "TCGA December data exploratory analysis"
+author: "Russel Sutherland"
+date: "8 May 2015"
+output: html_document
+---
+
+This document shows the exploratory analyses I conducted on the TCGA December 2012 data.
+I have principal component analyses and correlations / wilcoxon tests to establish associations with clinical features.
+The MDS plots allow us to see any potential technical effects present in the data.
+
+```{r, echo=FALSE}
+
+library(scales)
+col1<-c("#33a02c", "#e31a1c", "#ff7f00", "#6a3d9a", "#ffff99", "#b15928")
+palette(col1)
+# the stratification object
+load("/Users/rds/Google Drive/PhD/chapters/TCGA_pipeline_effect/MDS_data/TCGA_stratification.RData")
+#the mutationmatrix
+load("/Users/rds/Dropbox/PhD/TCGA_pipeline/MDS_data/TCGA_mutationMatrixLogical2.RData")
+#the ISOMDS object
+load("/Users/rds/Dropbox/PhD/TCGA_pipeline/MDS_data/TCGA_ISOMDS.RData")
+#the silent mutation rate data
+load("/Users/rds/Dropbox/PhD/TCGA_pipeline/MDS_data/TCGA_silentMutationsPerIndiv.RData")
+
+```
+
+The number of colon and rectum samples
+```{r, echo=TRUE}
+ table(TCGA_stratification$tumourType[,2])
+```
+
+The breakdown of cancer type by sequencer type and test for over-representation
+```{r,echo=FALSE}
+table(TCGA_stratification$seqTech[,2], TCGA_stratification$tumourType[,2])
+chisq.test(TCGA_stratification$seqTech[,2], TCGA_stratification$tumourType[,2])
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+
+Principal component analysis conducted on the Binary Mutation Matrix.
+```{r, echo=FALSE}
+
+#TCGA nature principal component analysis
+TCGA_prcomp<-prcomp(t(TCGA_mutationMatrixLogical2), scale=TRUE)
+#TCGA_prcomp_mutTable<-prcomp(t(mutationTable), scale=TRUE)
+
+screeplot(TCGA_prcomp, type="lines",col="dark grey", main="TCGA December PCA screeplot")
+```
+
+Variance from the first 10 principal components
+```{r,echo=FALSE}
+summary(TCGA_prcomp)[[6]][,1:10]
+```
+
+
+##Correlations of features with the first principal component
+relationship of silent mutation rate with PC1
+```{r, echo=FALSE}
+
+#correlation of PC1 with metadata
+cor.test(TCGA_prcomp$x[,1], TCGA_silentMutationsPerIndiv, method = "spearman")# correlation with mutation rate
+```
+
+relationship of age with PC1
+```{r, echo=FALSE}
+
+#correlation of PC1 with metadata
+cor.test(TCGA_prcomp$x[,1], TCGA_stratification$age_at_initial_pathologic_diagnosis[,2], method = "spearman")# correlation with age
+```
+
+
+Sequencer relationship to PC1
+```{r,echo=FALSE}
+wilcox.test(TCGA_prcomp$x[,1]~ TCGA_stratification$seqTech[,2])# correlation with sequence center
+by(TCGA_prcomp$x[,1],TCGA_stratification$seqTech[,2], FUN=mean)
+```
+
+Gender relationship to PC1
+```{r,echo=FALSE}
+wilcox.test(TCGA_prcomp$x[,1]~ TCGA_stratification$gender[,2])# correlation with mutation gender
+by(TCGA_prcomp$x[,1],TCGA_stratification$gender[,2], FUN=mean)
+
+```
+cancer type relationship to PC1
+```{r,echo=FALSE}
+wilcox.test(TCGA_prcomp$x[,1]~ TCGA_stratification$tumourType[,2])# correlation with mutation gender
+by(TCGA_prcomp$x[,1],TCGA_stratification$tumourType[,2], FUN=mean)
+
+```
+
+
+## Multi Dimensional Scaling Plots
+
+```{r, echo=FALSE}
+
+MDSplot<- function(mdsPoints,smplclrs,hyperMutIndex){
+  par(mar=c(6,6,6,6))
+  par(xpd=TRUE)
+  plot(mdsPoints$points[,1],mdsPoints$points[,2], pch = 19, col=alpha(smplclrs[,1],0.5), cex=0.7, cex.lab=0.7, cex.main = 0.7, cex.axis=0.7, xlab="dimension 1", ylab="dimension 2")
+  points(mdsPoints$points[hyperMutIndex,1], mdsPoints$points[hyperMutIndex,2],pch=1, cex = 0.9)
+  #legend(min(v$points[,1])+0.01, max(v$points[,2]), bty="n", c("SOLiD", "IlluminaHiSeq","not available","hypermutated"), cex=3, pch=c(19,19,19,1),col=c(col1[c(2,1,3)], "black"))
+  legend(min(mdsPoints$points[,1])+0.01, max(mdsPoints$points[,2]),bty="n", c(unique(smplclrs[,2]),"hypermutated"), cex=0.7,pt.cex=0.7, pch=c(rep(19, length(unique(smplclrs[,2]))),1),col=c(seq_along(1:length(unique(smplclrs[,1]))),"black"))
+}
+```
+
+### sequencer MDS plot
+
+```{r, fig.width=8, fig.height=8, echo=FALSE}
+
+MDSplot(TCGA_ISOMDS,TCGA_stratification$seqTech,which(TCGA_stratification$hyperMutatedMetaData[,2]))
+
+```
+
+### microsatellite instability MDS plot
+
+```{r, fig.width=8, fig.height=8, echo=FALSE}
+MDSplot(TCGA_ISOMDS,TCGA_stratification$mononucleotide_and_dinucleotide_marker_panel_analysis_status,which(TCGA_stratification$hyperMutatedMetaData[,2]))
+
+
+```

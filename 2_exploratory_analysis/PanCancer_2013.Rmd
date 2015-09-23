@@ -1,0 +1,138 @@
+---
+title: "PanCan_2013"
+author: "Russel Sutherland"
+date: "13th May 2015"
+output: html_document
+---
+
+
+This document shows the exploratory analyses I conducted on the PanCancer data.This data comes from the SAGE synapse repository (accession syn1710680) (https://www.synapse.org/#!Synapse:syn1710680).
+
+I have principal component analyses and correlations / wilcoxon /kruskal wallis tests to establish associations with clinical features.
+The MDS plots allow us to see any potential technical effects present in the data.
+
+```{r, echo=FALSE}
+library(scales)
+col1<-c("#33a02c", "#e31a1c", "#ff7f00", "#6a3d9a", "#ffff99", "#b15928")
+palette(col1)
+# the stratification object
+load("/Users/rds/Dropbox/PhD/TCGA_pipeline/MDS_data/PanCanStrat.RData")
+#the mutationmatrix
+load("/Users/rds/Dropbox/PhD/TCGA_pipeline/MDS_data/PanCan_mutationMatrixLogical2.RData")
+#the ISOMDS object
+load("/Users/rds/Dropbox/PhD/TCGA_pipeline/MDS_data/PanCan_ISOMDS.RData")
+#the silent mutation rate data
+load("/Users/rds/Dropbox/PhD/TCGA_pipeline/MDS_data/PanCan_silentMutationsPerIndiv.RData")######run this and save it when I get home
+
+```
+
+The number of colon and rectum samples
+```{r, echo=TRUE}
+ table(PanCanstrat$tumourType[,2])
+```
+
+The breakdown of cancer type by sequencer type and test for over-representation
+```{r,echo=FALSE}
+table(PanCanstrat$sequenceCenter[,2], PanCanstrat$tumourType[,2])
+chisq.test(PanCanstrat$sequenceCenter[,2], PanCanstrat$tumourType[,2])
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+
+Principal component analysis conducted on the Binary Mutation Matrix.
+```{r, echo=FALSE}
+
+#TCGA nature principal component analysis
+PanCan_prcomp<-prcomp(t(PanCan_mutationMatrixLogical2), scale=TRUE)
+#TCGA_prcomp_mutTable<-prcomp(t(mutationTable), scale=TRUE)
+
+screeplot(PanCan_prcomp, type="lines",col="dark grey", main="TCGA June PCA screeplot")
+```
+
+Variance from the first 10 principal components
+```{r,echo=FALSE}
+summary(PanCan_prcomp)[[6]][,1:10]
+```
+
+
+##Correlations of features with the first principal component
+```{r, echo=FALSE}
+
+#correlation of PC1 with metadata
+cor.test(PanCan_prcomp$x[,1], PanCan_silentMutationsPerIndiv, method = "spearman")# correlation with mutation rate
+```
+relationship of age with PC1
+```{r, echo=FALSE}
+
+#correlation of PC1 with metadata
+cor.test(PanCan_prcomp$x[,1], PanCanstrat$age_at_initial_pathologic_diagnosis[,2], method = "spearman")# correlation with age
+```
+
+
+
+
+sequencer relationship to PC1
+```{r, echo=FALSE}
+kruskal.test(PanCan_prcomp$x[,1]~as.factor(PanCanstrat$sequenceCenter[,2]))
+# correlation with sequence center
+by(PanCan_prcomp$x[,1],PanCanstrat$sequenceCenter[,2], FUN=mean)
+#post hoc comparisons
+pairwise.wilcox.test(PanCan_prcomp$x[,1], PanCanstrat$sequenceCenter[,2], p.adj="bonferroni",exact=F)
+prcompseq<-data.frame(PC1=PanCan_prcomp$x[,1],seqCenter=PanCanstrat$sequenceCenter[,2])
+prcompseq<-prcompseq[PanCanstrat$sequenceCenter[,2]!="[Not Available]",]
+library(coin)
+#effect size comparison between BCM and Washington University
+pcseqtest<-wilcox_test(PC1~factor(seqCenter), data=prcompseq)
+pcseqtest
+```
+
+effectsize
+```{r, echo=FALSE}
+pcseqtest@statistic@teststatistic/sqrt(220)
+
+```
+gender relationship to PC1
+```{r, echo=FALSE}
+#cor.test(TCGA_prcomp$x[,1], TCGA_stratification$age_at_initial_pathologic_diagnosis[,2])# correlation with age
+wilcox.test(PanCan_prcomp$x[,1]~ PanCanstrat$gender[,2], conf.int = TRUE)#  do the genders has different pc1 scores?
+by(PanCan_prcomp$x[,1],PanCanstrat$gender[,2], FUN=mean)
+```
+cancer type relationship with PC1
+```{r, echo=FALSE}
+wilcox.test(PanCan_prcomp$x[,1]~ PanCanstrat$tumourType[,2], conf.int = TRUE)# correlation with mutation gender
+by(PanCan_prcomp$x[,1],PanCanstrat$tumourType[,2], FUN=mean)
+
+```
+
+
+## Multi Dimensional Scaling Plots
+
+```{r, echo=FALSE}
+
+MDSplot<- function(mdsPoints,smplclrs,hyperMutIndex){
+  par(mar=c(6,6,6,6))
+  par(xpd=TRUE)
+  plot(mdsPoints$points[,1],mdsPoints$points[,2], pch = 19, col=alpha(smplclrs[,1],0.5), cex=0.7, cex.lab=0.7, cex.main = 0.7, cex.axis=0.7, xlab="dimension 1", ylab="dimension 2")
+  points(mdsPoints$points[hyperMutIndex,1], mdsPoints$points[hyperMutIndex,2],pch=1, cex = 0.9)
+  #legend(min(v$points[,1])+0.01, max(v$points[,2]), bty="n", c("SOLiD", "IlluminaHiSeq","not available","hypermutated"), cex=3, pch=c(19,19,19,1),col=c(col1[c(2,1,3)], "black"))
+  legend(min(mdsPoints$points[,1])+0.01, max(mdsPoints$points[,2]),bty="n", c(unique(smplclrs[,2]),"hypermutated"), cex=0.7,pt.cex=0.7, pch=c(rep(19, length(unique(smplclrs[,2]))),1),col=c(seq_along(1:length(unique(smplclrs[,1]))),"black"))
+}
+```
+
+#### sequencer MDS plot
+
+```{r, fig.width=8, fig.height=8, echo=FALSE}
+
+MDSplot(PanCan_ISOMDS,PanCanstrat$sequenceCenter,which(PanCanstrat$hypermutated[,2]==TRUE))
+
+```
+
+#### microsatellite instability MDS plot
+
+```{r, fig.width=8, fig.height=8, echo=FALSE}
+MDSplot(PanCan_ISOMDS,PanCanstrat$mononucleotide_and_dinucleotide_marker_panel_analysis_status,which(PanCanstrat$hypermutated[,2]==TRUE))
+
+
+```
